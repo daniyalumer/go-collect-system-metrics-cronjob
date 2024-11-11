@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/joho/godotenv"
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/disk"
 	"github.com/shirou/gopsutil/v4/mem"
@@ -95,19 +96,32 @@ func saveSystemMetrics(metrics *SystemMetrics) {
 }
 
 func sendMetricsToEmail() {
+	if err := godotenv.Load(); err != nil {
+		log.Printf("Error loading .env file: %v\n", err)
+		return
+	}
+
+	requiredEnvVars := []string{"SMTP_FROM", "SMTP_TO", "SMTP_HOST", "SMTP_USER", "SMTP_PASSWORD"}
+	for _, envVar := range requiredEnvVars {
+		if os.Getenv(envVar) == "" {
+			log.Printf("Error: %s environment variable is not set", envVar)
+			return
+		}
+	}
+
 	message := gomail.NewMessage()
-	message.SetHeader("From", "from@example.com")
-	message.SetHeader("To", "to@example.com")
+	message.SetHeader("From", os.Getenv("SMTP_FROM"))
+	message.SetHeader("To", os.Getenv("SMTP_TO"))
 	message.SetHeader("Subject", "System Metrics")
 
 	filename := fmt.Sprintf("./reports/metrics_%s.csv", time.Now().Format("2006-01-02_150405"))
 	message.Attach(filename)
 
 	dialer := gomail.NewDialer(
-		"sandbox.smtp.mailtrap.io",
+		os.Getenv("SMTP_HOST"),
 		2525,
-		"8aa2e44334feed",
-		"d7f41c0353d10f",
+		os.Getenv("SMTP_USER"),
+		os.Getenv("SMTP_PASSWORD"),
 	)
 	dialer.Timeout = 10 * time.Second
 	if err := dialer.DialAndSend(message); err != nil {
