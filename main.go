@@ -10,6 +10,7 @@ import (
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/disk"
 	"github.com/shirou/gopsutil/v4/mem"
+	gomail "gopkg.in/mail.v2"
 )
 
 type SystemMetrics struct {
@@ -93,6 +94,29 @@ func saveSystemMetrics(metrics *SystemMetrics) {
 	writer.Flush()
 }
 
+func sendMetricsToEmail() {
+	message := gomail.NewMessage()
+	message.SetHeader("From", "from@example.com")
+	message.SetHeader("To", "to@example.com")
+	message.SetHeader("Subject", "System Metrics")
+
+	filename := fmt.Sprintf("./reports/metrics_%s.csv", time.Now().Format("2006-01-02_150405"))
+	message.Attach(filename)
+
+	dialer := gomail.NewDialer(
+		"sandbox.smtp.mailtrap.io",
+		2525,
+		"8aa2e44334feed",
+		"d7f41c0353d10f",
+	)
+	dialer.Timeout = 10 * time.Second
+	if err := dialer.DialAndSend(message); err != nil {
+		log.Printf("Error sending email: %v\n", err)
+	} else {
+		log.Println("Email sent successfully")
+	}
+}
+
 func main() {
 	metrics, err := getSystemMetrics()
 	if err != nil {
@@ -101,4 +125,7 @@ func main() {
 	}
 	log.Printf("Metrics: %+v\n", metrics)
 	saveSystemMetrics(metrics)
+
+	log.Println("Sending metrics to email")
+	sendMetricsToEmail()
 }
