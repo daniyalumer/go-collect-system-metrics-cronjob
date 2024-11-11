@@ -65,6 +65,11 @@ func getSystemMetrics() (*SystemMetrics, error) {
 }
 
 func saveSystemMetrics(metrics *SystemMetrics) {
+	if err := os.MkdirAll("./reports", 0755); err != nil {
+		log.Printf("Error creating reports directory: %v\n", err)
+		return
+	}
+
 	filename := fmt.Sprintf("./reports/metrics_%s.csv", time.Now().Format("2006-01-02_150405"))
 	file, err := os.Create(filename)
 	if err != nil {
@@ -99,14 +104,6 @@ func sendMetricsToEmail() {
 	if err := godotenv.Load(); err != nil {
 		log.Printf("Error loading .env file: %v\n", err)
 		return
-	}
-
-	requiredEnvVars := []string{"SMTP_FROM", "SMTP_TO", "SMTP_HOST", "SMTP_USER", "SMTP_PASSWORD"}
-	for _, envVar := range requiredEnvVars {
-		if os.Getenv(envVar) == "" {
-			log.Printf("Error: %s environment variable is not set", envVar)
-			return
-		}
 	}
 
 	message := gomail.NewMessage()
