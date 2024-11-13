@@ -65,16 +65,16 @@ func getSystemMetrics() (*SystemMetrics, error) {
 	}, nil
 }
 
-func saveSystemMetrics(metrics *SystemMetrics, fileName string) {
+func saveSystemMetrics(metrics *SystemMetrics, fileName string) error {
 	if err := os.MkdirAll("./reports", 0755); err != nil {
 		log.Printf("Error creating reports directory: %v\n", err)
-		return
+		return err
 	}
 
 	file, err := os.Create(fileName)
 	if err != nil {
 		log.Printf("Error creating metrics file: %v\n", err)
-		return
+		return err
 	}
 	defer file.Close()
 
@@ -95,17 +95,13 @@ func saveSystemMetrics(metrics *SystemMetrics, fileName string) {
 	})
 	if err != nil {
 		log.Printf("Error writing to metrics file: %v\n", err)
-		return
+		return err
 	}
 	writer.Flush()
+	return nil
 }
 
-func sendMetricsToEmail(fileName string) {
-	if err := godotenv.Load(); err != nil {
-		log.Printf("Error loading .env file: %v\n", err)
-		return
-	}
-
+func sendMetricsToEmail(fileName string) error {
 	message := gomail.NewMessage()
 	message.SetHeader("From", os.Getenv("SMTP_FROM"))
 	message.SetHeader("To", os.Getenv("SMTP_TO"))
@@ -116,6 +112,7 @@ func sendMetricsToEmail(fileName string) {
 	smtpPort, err := strconv.Atoi(os.Getenv("SMTP_PORT"))
 	if err != nil {
 		log.Fatalf("Invalid SMTP port: %v", err)
+		return err
 	}
 
 	dialer := gomail.NewDialer(
@@ -137,14 +134,22 @@ func sendMetricsToEmail(fileName string) {
 			}
 		} else {
 			log.Println("Email sent successfully")
-			return
+			return err
 		}
 	}
+	return nil
 }
 
 func main() {
+	if err := godotenv.Load(); err != nil {
+		log.Printf("Error loading .env file: %v\n", err)
+		return
+	}
+
 	currentTime := time.Now().Format("2006-01-02_150405")
-	fileName := fmt.Sprintf("%smetrics_%s.csv", os.Getenv("DIRECTORY_PATH"), currentTime)
+	directoryPath := os.Getenv("DIRECTORY_PATH")
+	log.Println("DIRECTORY_PATH", directoryPath)
+	fileName := fmt.Sprintf("%smetrics_%s.csv", directoryPath, currentTime)
 
 	metrics, err := getSystemMetrics()
 	if err != nil {
@@ -152,8 +157,16 @@ func main() {
 		return
 	}
 	log.Printf("Metrics: %+v\n", metrics)
-	saveSystemMetrics(metrics, fileName)
+	err = saveSystemMetrics(metrics, fileName)
+	if err != nil {
+		log.Printf("Error saving system metrics: %v\n", err)
+		return
+	}
 
 	log.Println("Sending metrics to email")
-	sendMetricsToEmail(fileName)
+	err = sendMetricsToEmail(fileName)
+	if err != nil {
+		log.Printf("Error sending system metrics: %v\n", err)
+		return
+	}
 }
