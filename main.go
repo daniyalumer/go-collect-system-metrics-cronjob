@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -64,14 +65,13 @@ func getSystemMetrics() (*SystemMetrics, error) {
 	}, nil
 }
 
-func saveSystemMetrics(metrics *SystemMetrics) {
+func saveSystemMetrics(metrics *SystemMetrics, fileName string) {
 	if err := os.MkdirAll("./reports", 0755); err != nil {
 		log.Printf("Error creating reports directory: %v\n", err)
 		return
 	}
 
-	filename := fmt.Sprintf("./reports/metrics_%s.csv", time.Now().Format("2006-01-02_150405"))
-	file, err := os.Create(filename)
+	file, err := os.Create(fileName)
 	if err != nil {
 		log.Printf("Error creating metrics file: %v\n", err)
 		return
@@ -100,7 +100,7 @@ func saveSystemMetrics(metrics *SystemMetrics) {
 	writer.Flush()
 }
 
-func sendMetricsToEmail() {
+func sendMetricsToEmail(fileName string) {
 	if err := godotenv.Load(); err != nil {
 		log.Printf("Error loading .env file: %v\n", err)
 		return
@@ -111,32 +111,49 @@ func sendMetricsToEmail() {
 	message.SetHeader("To", os.Getenv("SMTP_TO"))
 	message.SetHeader("Subject", "System Metrics")
 
-	filename := fmt.Sprintf("./reports/metrics_%s.csv", time.Now().Format("2006-01-02_150405"))
-	message.Attach(filename)
+	message.Attach(fileName)
+
+	smtpPort, err := strconv.Atoi(os.Getenv("SMTP_PORT"))
+	if err != nil {
+		log.Fatalf("Invalid SMTP port: %v", err)
+	}
 
 	dialer := gomail.NewDialer(
 		os.Getenv("SMTP_HOST"),
-		2525,
+		smtpPort,
 		os.Getenv("SMTP_USER"),
 		os.Getenv("SMTP_PASSWORD"),
 	)
-	dialer.Timeout = 10 * time.Second
-	if err := dialer.DialAndSend(message); err != nil {
-		log.Printf("Error sending email: %v\n", err)
-	} else {
-		log.Println("Email sent successfully")
+
+	maxRetries := 3
+	retryDelay := 5 * time.Second
+
+	for i := 0; i < maxRetries; i++ {
+		if err := dialer.DialAndSend(message); err != nil {
+			log.Printf("Attempt %d: Error sending email: %v\n", i+1, err)
+			if i < maxRetries-1 {
+				log.Printf("Retrying in %v...\n", retryDelay)
+				time.Sleep(retryDelay)
+			}
+		} else {
+			log.Println("Email sent successfully")
+			return
+		}
 	}
 }
 
 func main() {
+	currentTime := time.Now().Format("2006-01-02_150405")
+	fileName := fmt.Sprintf("%smetrics_%s.csv", os.Getenv("DIRECTORY_PATH"), currentTime)
+
 	metrics, err := getSystemMetrics()
 	if err != nil {
 		log.Printf("Error getting system metrics: %v\n", err)
 		return
 	}
 	log.Printf("Metrics: %+v\n", metrics)
-	saveSystemMetrics(metrics)
+	saveSystemMetrics(metrics, fileName)
 
 	log.Println("Sending metrics to email")
-	sendMetricsToEmail()
+	sendMetricsToEmail(fileName)
 }
